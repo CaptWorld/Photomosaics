@@ -86,11 +86,10 @@ def join_divided_images(images: List[List[Image.Image]]) -> Image.Image:
 
 
 if __name__ == "__main__":
-    source_img: Image.Image = load_image("input/monkey.jpeg")
+    input_img: Image.Image = load_image("input/monkey.jpeg")
 
-    square_size: int = 3
-
-    divided_images: List[List[Image.Image]] = divide(source_img, square_size)
+    square_size: int = 50
+    divided_images: List[List[Image.Image]] = divide(input_img, square_size)
 
     divided_images_with_filled_colors: List[List[Image.Image]] = op_on_divided_images(
         divided_images, fill_with_avg_color
