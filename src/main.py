@@ -1,5 +1,8 @@
+import json
 from math import ceil
-from typing import Callable, List, Sequence, Tuple, TypeVar
+import math
+import os
+from typing import Callable, Dict, List, Sequence, Tuple, TypeVar
 from PIL import Image, ImageDraw
 
 T = TypeVar("T")
@@ -7,6 +10,28 @@ T = TypeVar("T")
 
 def load_image(image_path: str) -> Image.Image:
     return Image.open(image_path)
+
+
+def save_image(img: Image.Image, save_path: str):
+    img.save(save_path)
+
+
+def resize_image_to_square(image: Image.Image, square_size: int):
+    return image.resize((square_size, square_size))
+
+
+def process_raw_source_images(
+    raw_source_img_dir: str, processed_source_img_dir: str, square_size: int
+):
+    if not os.path.isdir(processed_source_img_dir):
+        os.makedirs(processed_source_img_dir)
+
+    for source_img_name in os.listdir(raw_source_img_dir):
+        source_img: Image.Image = load_image(
+            os.path.join(raw_source_img_dir, source_img_name)
+        )
+        source_img = resize_image_to_square(source_img, square_size)
+        save_image(source_img, os.path.join(processed_source_img_dir, source_img_name))
 
 
 def get_image_data(img: Image.Image) -> Sequence[Tuple[int, int, int]]:
@@ -22,6 +47,28 @@ def avg_color(img: Image.Image) -> Tuple[int, int, int]:
         b += pixel[2]
         n_pixels += 1
     return round(r / n_pixels), round(g / n_pixels), round(b / n_pixels)
+
+
+def generate_cache(
+    source_images_dir: str, cache_file_path: str
+) -> Dict[str, Tuple[int, int, int]]:
+    cache: Dict[str, Tuple[int, int, int]] = {}
+
+    for source_image_name in os.listdir(source_images_dir):
+        source_image_path: str = os.path.join(source_images_dir, source_image_name)
+        source_image: Image.Image = load_image(source_image_path)
+        cache[source_image_path] = avg_color(source_image)
+
+    with open(cache_file_path, "w+") as f:
+        json.dump(cache, f)
+
+    return cache
+
+
+def get_cache(cache_file_path: str) -> Dict[str, Tuple[int, int, int]] | None:
+    if os.path.exists(cache_file_path):
+        with open(cache_file_path, "r") as f:
+            return json.load(f)
 
 
 def divide(img: Image.Image, square_size: int) -> List[List[Image.Image]]:
@@ -85,16 +132,46 @@ def join_divided_images(images: List[List[Image.Image]]) -> Image.Image:
     return joined_image
 
 
+def distance_between_two_pixels(
+    p1: Tuple[int, int, int], p2: Tuple[int, int, int]
+) -> float:
+    return math.dist(p1, p2)
+
+
+def get_closest_image(
+    cache: Dict[str, Tuple[int, int, int]], pixel: Tuple[int, int, int]
+):
+    return min(
+        cache,
+        key=lambda image_path: distance_between_two_pixels(cache[image_path], pixel),
+    )
+
+
 if __name__ == "__main__":
     input_img: Image.Image = load_image("input/monkey.jpeg")
 
-    square_size: int = 50
+    processed_source_images_dir: str = "source/processed"
+
+    # One time script
+    # raw_source_images_dir: str = "source/raw"
+    # process_raw_source_images(raw_source_images_dir, processed_source_images_dir, 300)
+
+    cache_file_path: str = "source/cache.json"
+    cache: Dict[str, Tuple[int, int, int]] | None = get_cache(cache_file_path)
+    if cache is None:
+        cache = generate_cache(processed_source_images_dir, cache_file_path)
+
+    square_size: int = 20
     divided_images: List[List[Image.Image]] = divide(input_img, square_size)
 
     divided_images_with_filled_colors: List[List[Image.Image]] = op_on_divided_images(
-        divided_images, fill_with_avg_color
+        divided_images,
+        lambda img: resize_image_to_square(
+            load_image(get_closest_image(cache, avg_color(img))), 100
+        ),
     )
 
     joined_img: Image.Image = join_divided_images(divided_images_with_filled_colors)
 
-    joined_img.show()
+    save_image(joined_img, os.path.join("output", "monkey.jpeg"))
+    # joined_img.show()
